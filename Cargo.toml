@@ -1,0 +1,22 @@
+[package]
+name = "ocujoy"
+version = "0.1.0"
+authors = ["Lyneca <atraguliauniliantauthr@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = "0.2"
+ovr-sys = "0.3.0"
+ctrlc = "3.1.4"
+ggez = "0.5.1"
+
+[lib]
+name = "ocujoy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ocujoy"
+path = "src/bin.rs"
+
