@@ -4,12 +4,13 @@ use ovr_sys::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use vjoyrs::{Axis, Joystick};
-
 use ggez::nalgebra::{Point3, Rotation3};
 use ggez::{event, graphics, nalgebra as na, Context, GameResult};
 
 use std::f32::consts::PI;
+
+mod vjoy;
+use vjoy::{Axis, Joystick};
 
 const RANGE: f32 = 32768.0;
 const MAX_ANGLE: f32 = PI / 4.0;
