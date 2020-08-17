@@ -12,6 +12,7 @@ libc = "0.2"
 ovr-sys = "0.3.0"
 ctrlc = "3.1.4"
 ggez = "0.5.1"
+clap = "3.0.0-beta.1"
 
 [[bin]]
 name = "ocujoy"

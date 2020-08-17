@@ -20,6 +20,7 @@ extern "C" {
     pub fn vJoyEnabled() -> BOOL;
     pub fn ResetAll() -> BOOL;
     pub fn SetAxis(Value: LONG, rID: UINT, Axis: UINT) -> BOOL;
+    pub fn SetDiscPov(Value: INT, rID: UINT, nPov: UCHAR) -> BOOL;
     pub fn SetBtn(Value: BOOL, rID: UINT, nBtn: UCHAR) -> BOOL; // Write Value to a given button defined in the specified VDJ
 }
 
@@ -38,6 +39,15 @@ pub enum Axis {
     SL1 = 0x37,
     WHL = 0x38,
     POV = 0x39,
+}
+
+#[derive(Copy, Clone)]
+pub enum PovDirection {
+    NORTH = 0,
+    EAST = 1,
+    SOUTH = 2,
+    WEST = 3,
+    NEUTRAL = -1
 }
 
 impl Joystick {
@@ -74,6 +84,20 @@ impl Joystick {
 
     pub fn set_axis(&mut self, axis: Axis, value: i32) -> Result<(), String> {
         if unsafe { SetAxis(value, self.device, axis as u32) } == 0 {
+            return Err(format!("Could not update device {}", self.device));
+        }
+        Ok(())
+    }
+
+    pub fn set_btn(&mut self, button: u8, state: bool) -> Result<(), String> {
+        if unsafe { SetBtn(state as i32, self.device, button as UCHAR) } == 0 {
+            return Err(format!("Could not update device {}", self.device));
+        }
+        Ok(())
+    }
+
+    pub fn set_pov(&mut self, pov: u8, value: PovDirection) -> Result<(), String> {
+        if unsafe { SetDiscPov(value as i32, self.device, pov) } == 0 {
             return Err(format!("Could not update device {}", self.device));
         }
         Ok(())

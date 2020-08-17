@@ -3,14 +3,17 @@ use ctrlc::set_handler;
 use ovr_sys::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::env::args;
 
 use ggez::nalgebra::{Point3, Rotation3};
 use ggez::{event, graphics, nalgebra as na, Context, GameResult};
 
+use clap::Clap;
+
 use std::f32::consts::PI;
 
 mod vjoy;
-use vjoy::{Axis, Joystick};
+use vjoy::{Axis, Joystick, PovDirection};
 
 const RANGE: f32 = 32768.0;
 const MAX_ANGLE: f32 = PI / 4.0;
@@ -28,6 +31,17 @@ where
         unsafe { ovr_GetLastErrorInfo(&mut *info as *mut _) }
         Err(info)
     }
+}
+
+#[derive(Clap)]
+#[clap(version = "1.0", author = "Luke Tuthill <lukemtuthill@gmail.com>")]
+struct Opts {
+    #[clap(short, long)]
+    input: bool,
+    #[clap(short, long)]
+    hatbuttons: bool,
+    #[clap(short, long)]
+    triggerbuttons: bool
 }
 
 #[derive(Debug)]
@@ -98,6 +112,7 @@ struct MainState {
     y: f32,
     z: f32,
     vibration: Vibration,
+    opts: Opts
 }
 
 struct Vibration {
@@ -181,8 +196,12 @@ impl Vibration {
     }
 }
 
+fn angle_from_vector(vector: ovrVector2f) -> f32 {
+    (vector.y).atan2(-vector.x) 
+}
+
 impl MainState {
-    fn new(session: ovrSession, joystick: Joystick) -> GameResult<MainState> {
+    fn new(session: ovrSession, joystick: Joystick, opts: Opts) -> GameResult<MainState> {
         Ok(MainState {
             session,
             joystick,
@@ -197,7 +216,56 @@ impl MainState {
             y: 0.0,
             z: 0.0,
             vibration: Vibration::new(),
+            opts: opts
         })
+    }
+
+    fn set_input(&mut self, input_state: &ovrInputState) {
+        let buttons = input_state.Buttons as i32;
+        self.joystick.set_btn(1, buttons & ovrButton_A > 0);
+        self.joystick.set_btn(2, buttons & ovrButton_B > 0);
+        self.joystick.set_btn(3, buttons & ovrButton_X > 0);
+        self.joystick.set_btn(4, buttons & ovrButton_Y > 0);
+        self.joystick.set_btn(5, buttons & ovrButton_LThumb > 0);
+        self.joystick.set_btn(6, buttons & ovrButton_RThumb > 0);
+        self.joystick.set_btn(7, buttons & ovrButton_Enter > 0);
+        if self.opts.triggerbuttons {
+            self.joystick.set_btn(8, input_state.IndexTrigger[0] > 0.5);
+            self.joystick.set_btn(9, input_state.IndexTrigger[1] > 0.5);
+        } else {
+            self.joystick.set_axis(Axis::SL0, (input_state.IndexTrigger[0] * 32768.0) as i32);
+            self.joystick.set_axis(Axis::SL1, (input_state.IndexTrigger[1] * 32768.0) as i32);
+        }
+        for i in 0..2 {
+            self.set_thumbstick(input_state.Thumbstick[i], i as u8 + 1);
+        }
+    }
+
+    fn set_pov_or_button(&mut self, pov: u8, direction: PovDirection) {
+        if self.opts.hatbuttons {
+            for i in 0..4 {
+                // if pov = 1, use buttons 10-13 inclusive
+                // if pov = 2, use buttons 14-17 inclusive
+                // NEUTRAL position sets all buttons to 0
+                self.joystick.set_btn(10 + 4 * (pov - 1) + i as u8, i == direction as usize);
+            }
+        } else {
+            self.joystick.set_pov(pov, direction);
+        }
+    }
+
+    fn set_thumbstick(&mut self, thumbstick: ovrVector2f, pov: u8) {
+        if thumbstick.x > 0.75 {
+            self.set_pov_or_button(pov, PovDirection::EAST);
+        } else if thumbstick.x < -0.75 {
+            self.set_pov_or_button(pov, PovDirection::WEST);
+        } else if thumbstick.y > 0.75 {
+            self.set_pov_or_button(pov, PovDirection::NORTH);
+        } else if thumbstick.y < -0.75 {
+            self.set_pov_or_button(pov, PovDirection::SOUTH);
+        } else {
+            self.set_pov_or_button(pov, PovDirection::NEUTRAL);
+        }
     }
 }
 
@@ -226,6 +294,10 @@ impl event::EventHandler for MainState {
                 ovrControllerType_Touch,
                 &mut input_state as *mut ovrInputState,
             );
+
+            if self.opts.input {
+                self.set_input(&input_state);
+            }
 
             let grips = input_state.HandTrigger;
             ovr_GetDevicePoses(
@@ -348,6 +420,7 @@ impl event::EventHandler for MainState {
             Ok(())
         }
     }
+
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, [0.0, 0.0, 0.0, 1.0].into());
         let red_circle = graphics::Mesh::new_circle(
@@ -407,6 +480,12 @@ impl event::EventHandler for MainState {
 }
 
 fn main() -> GameResult {
+    let args: Vec<String> = args().collect();
+    let opts: Opts = Opts::parse();
+    let capture_input = match args.get(1) {
+        Some(arg) if arg == "--input" => true,
+        _ => false
+    };
     unsafe {
         let mut params: ovrInitParams = ::std::mem::zeroed();
         params.Flags |= ovrInit_RequestVersion + 0x00000010;
@@ -424,7 +503,7 @@ fn main() -> GameResult {
         let (ctx, event_loop) = &mut cb.build()?;
         let mut joystick = Joystick::new(1);
         joystick.acquire();
-        let state = &mut MainState::new(session, joystick)?;
+        let state = &mut MainState::new(session, joystick, opts)?;
         event::run(ctx, event_loop, state)
     }
 }
